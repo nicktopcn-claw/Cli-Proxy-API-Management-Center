@@ -206,7 +206,19 @@ export function AiProvidersOpenAIEditPage() {
         return false;
       }
 
-      const modelName = testModel.trim() || availableModels[0] || '';
+      // For embeddings, use a default model if testModel is empty
+      let modelName = testModel.trim();
+      if (!modelName) {
+        if (testType === 'embeddings' && availableModels.length > 0) {
+          modelName = availableModels[0];
+        } else if (testType === 'embeddings') {
+          // Use a known working model for Jina embeddings
+          modelName = 'jina-embeddings-v2-base-en';
+        } else if (availableModels.length > 0) {
+          modelName = availableModels[0];
+        }
+      }
+      
       if (!modelName) {
         showNotification(t('notification.openai_test_model_required'), 'error');
         return false;
@@ -252,10 +264,11 @@ export function AiProvidersOpenAIEditPage() {
         }
 
         if (testType === 'embeddings') {
-          const responseBody = result.body || '';
+          const responseBody = result.body ?? result.bodyText ?? '';
           const response = typeof responseBody === 'string' ? JSON.parse(responseBody) : responseBody;
-          if (!response.data || !Array.isArray(response.data)) {
-            throw new Error('Invalid embeddings response');
+          const data = response?.data;
+          if (!data || (!Array.isArray(data) && !Array.isArray(response))) {
+            throw new Error('Invalid embeddings response: missing data array');
           }
         }
 

@@ -136,34 +136,58 @@ export const modelsApi = {
 
   /**
    * Fetch models from /models endpoint via api-call (for OpenAI provider discovery)
+   * Tries /v1/models first (for Jina and similar APIs), then falls back to /models
    */
   async fetchModelsViaApiCall(
     baseUrl: string,
     apiKey?: string,
     headers: Record<string, string> = {}
   ) {
-    const endpoint = buildModelsEndpoint(baseUrl);
-    if (!endpoint) {
-      throw new Error('Invalid base url');
-    }
+    const v1Endpoint = buildV1ModelsEndpoint(baseUrl);
+    const fallbackEndpoint = buildModelsEndpoint(baseUrl);
 
     const resolvedHeaders = { ...headers };
     if (apiKey && !hasHeader(resolvedHeaders, 'authorization')) {
       resolvedHeaders.Authorization = `Bearer ${apiKey}`;
     }
 
-    const result = await apiCallApi.request({
-      method: 'GET',
-      url: endpoint,
-      header: Object.keys(resolvedHeaders).length ? resolvedHeaders : undefined
-    });
+    const headersToSend = Object.keys(resolvedHeaders).length ? resolvedHeaders : undefined;
 
-    if (result.statusCode < 200 || result.statusCode >= 300) {
-      throw new Error(getApiCallErrorMessage(result));
+    // Try /v1/models first (Jina and other modern APIs)
+    if (v1Endpoint) {
+      try {
+        const result = await apiCallApi.request({
+          method: 'GET',
+          url: v1Endpoint,
+          header: headersToSend
+        });
+
+        if (result.statusCode >= 200 && result.statusCode < 300) {
+          const payload = result.body ?? result.bodyText;
+          return normalizeModelList(payload, { dedupe: true });
+        }
+      } catch {
+        // Continue to fallback
+      }
     }
 
-    const payload = result.body ?? result.bodyText;
-    return normalizeModelList(payload, { dedupe: true });
+    // Fallback to /models endpoint
+    if (fallbackEndpoint) {
+      const result = await apiCallApi.request({
+        method: 'GET',
+        url: fallbackEndpoint,
+        header: headersToSend
+      });
+
+      if (result.statusCode < 200 || result.statusCode >= 300) {
+        throw new Error(getApiCallErrorMessage(result));
+      }
+
+      const payload = result.body ?? result.bodyText;
+      return normalizeModelList(payload, { dedupe: true });
+    }
+
+    throw new Error('Invalid base url');
   },
 
   buildV1ModelsEndpoint(baseUrl: string) {
