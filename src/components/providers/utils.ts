@@ -73,6 +73,15 @@ export const buildOpenAIChatCompletionsEndpoint = (baseUrl: string): string => {
   return `${trimmed}/chat/completions`;
 };
 
+export const buildOpenAIEmbeddingsEndpoint = (baseUrl: string): string => {
+  const trimmed = normalizeOpenAIBaseUrl(baseUrl);
+  if (!trimmed) return '';
+  if (trimmed.endsWith('/v1/embeddings') || trimmed.endsWith('/embeddings')) {
+    return trimmed;
+  }
+  return `${trimmed}/v1/embeddings`;
+};
+
 export const buildClaudeMessagesEndpoint = (baseUrl: string): string => {
   const trimmed = normalizeClaudeBaseUrl(baseUrl);
   if (!trimmed) return '';

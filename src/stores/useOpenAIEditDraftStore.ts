@@ -28,6 +28,7 @@ export type OpenAIEditDraft = {
   testStatus: OpenAITestStatus;
   testMessage: string;
   keyTestStatuses: KeyTestStatus[];
+  testType: 'chat' | 'embeddings';
 };
 
 interface OpenAIEditDraftState {
@@ -45,6 +46,7 @@ interface OpenAIEditDraftState {
   setDraftKeyTestStatus: (draftKey: string, keyIndex: number, status: KeyTestStatus) => void;
   resetDraftKeyTestStatuses: (draftKey: string, count: number) => void;
   clearDraft: (key: string) => void;
+  setDraftTestType: (key: string, action: SetStateAction<'chat' | 'embeddings'>) => void;
 }
 
 const resolveAction = <T,>(action: SetStateAction<T>, prev: T): T =>
@@ -58,6 +60,7 @@ const buildEmptyForm = (): OpenAIFormState => ({
   apiKeyEntries: [buildApiKeyEntry()],
   modelEntries: [{ name: '', alias: '' }],
   testModel: undefined,
+  testType: 'chat',
 });
 
 const buildEmptyDraft = (): OpenAIEditDraft => ({
@@ -68,6 +71,7 @@ const buildEmptyDraft = (): OpenAIEditDraft => ({
   testStatus: 'idle',
   testMessage: '',
   keyTestStatuses: [],
+  testType: 'chat',
 });
 
 export const useOpenAIEditDraftStore = create<OpenAIEditDraftState>((set, get) => ({
@@ -233,6 +237,20 @@ export const useOpenAIEditDraftStore = create<OpenAIEditDraftState>((set, get) =
       const nextCounts = { ...state.refCounts };
       delete nextCounts[key];
       return { drafts: nextDrafts, refCounts: nextCounts };
+    });
+  },
+
+  setDraftTestType: (key, action) => {
+    if (!key) return;
+    set((state) => {
+      const existing = state.drafts[key] ?? buildEmptyDraft();
+      const nextValue = resolveAction(action, existing.testType);
+      return {
+        drafts: {
+          ...state.drafts,
+          [key]: { ...existing, initialized: true, testType: nextValue },
+        },
+      };
     });
   },
 }));

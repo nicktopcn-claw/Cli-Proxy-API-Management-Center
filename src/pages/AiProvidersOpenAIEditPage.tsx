@@ -13,7 +13,7 @@ import { useNotificationStore } from '@/stores';
 import { apiCallApi, getApiCallErrorMessage } from '@/services/api';
 import type { ApiKeyEntry } from '@/types';
 import { buildHeaderObject, hasHeader } from '@/utils/headers';
-import { buildApiKeyEntry, buildOpenAIChatCompletionsEndpoint } from '@/components/providers/utils';
+import { buildApiKeyEntry, buildOpenAIChatCompletionsEndpoint, buildOpenAIEmbeddingsEndpoint } from '@/components/providers/utils';
 import type { OpenAIEditOutletContext } from './AiProvidersOpenAIEditLayout';
 import type { KeyTestStatus } from '@/stores/useOpenAIEditDraftStore';
 import styles from './AiProvidersPage.module.scss';
@@ -118,6 +118,8 @@ export function AiProvidersOpenAIEditPage() {
     availableModels,
     handleBack,
     handleSave,
+    testType,
+    setTestType,
   } = useOutletContext<OpenAIEditOutletContext>();
 
   const title = hasIndexParam
@@ -190,7 +192,9 @@ export function AiProvidersOpenAIEditPage() {
         return false;
       }
 
-      const endpoint = buildOpenAIChatCompletionsEndpoint(baseUrl);
+      const endpoint = testType === 'embeddings'
+        ? buildOpenAIEmbeddingsEndpoint(baseUrl)
+        : buildOpenAIChatCompletionsEndpoint(baseUrl);
       if (!endpoint) {
         showNotification(t('notification.openai_test_url_required'), 'error');
         return false;
@@ -220,24 +224,39 @@ export function AiProvidersOpenAIEditPage() {
       // Set loading state for this key
       setDraftKeyTestStatus(keyIndex, { status: 'loading', message: '' });
 
+      const requestData = testType === 'embeddings'
+        ? {
+            model: modelName,
+            input: 'test',
+          }
+        : {
+            model: modelName,
+            messages: [{ role: 'user', content: 'Hi' }],
+            stream: false,
+            max_tokens: 5,
+          };
+
       try {
         const result = await apiCallApi.request(
           {
             method: 'POST',
             url: endpoint,
             header: Object.keys(headers).length ? headers : undefined,
-            data: JSON.stringify({
-              model: modelName,
-              messages: [{ role: 'user', content: 'Hi' }],
-              stream: false,
-              max_tokens: 5,
-            }),
+            data: JSON.stringify(requestData),
           },
           { timeout: OPENAI_TEST_TIMEOUT_MS }
         );
 
         if (result.statusCode < 200 || result.statusCode >= 300) {
           throw new Error(getApiCallErrorMessage(result));
+        }
+
+        if (testType === 'embeddings') {
+          const responseBody = result.body || '';
+          const response = typeof responseBody === 'string' ? JSON.parse(responseBody) : responseBody;
+          if (!response.data || !Array.isArray(response.data)) {
+            throw new Error('Invalid embeddings response');
+          }
         }
 
         setDraftKeyTestStatus(keyIndex, { status: 'success', message: '' });
@@ -256,7 +275,7 @@ export function AiProvidersOpenAIEditPage() {
         return false;
       }
     },
-    [form.baseUrl, form.apiKeyEntries, form.headers, testModel, availableModels, t, setDraftKeyTestStatus, showNotification]
+    [form.baseUrl, form.apiKeyEntries, form.headers, testModel, availableModels, testType, t, setDraftKeyTestStatus, showNotification]
   );
 
   const testSingleKey = useCallback(
@@ -285,7 +304,9 @@ export function AiProvidersOpenAIEditPage() {
       return;
     }
 
-    const endpoint = buildOpenAIChatCompletionsEndpoint(baseUrl);
+    const endpoint = testType === 'embeddings'
+      ? buildOpenAIEmbeddingsEndpoint(baseUrl)
+      : buildOpenAIChatCompletionsEndpoint(baseUrl);
     if (!endpoint) {
       const message = t('notification.openai_test_url_required');
       setTestStatus('error');
@@ -350,6 +371,7 @@ export function AiProvidersOpenAIEditPage() {
     form.apiKeyEntries,
     testModel,
     availableModels,
+    testType,
     t,
     setTestStatus,
     setTestMessage,
@@ -638,6 +660,20 @@ export function AiProvidersOpenAIEditPage() {
                   <span className={styles.modelTestHint}>{t('ai_providers.openai_test_hint')}</span>
                 </div>
                 <div className={styles.modelTestControls}>
+                  <Select
+                    value={testType}
+                    options={[
+                      { value: 'chat', label: 'Chat' },
+                      { value: 'embeddings', label: 'Embeddings' },
+                    ]}
+                    onChange={(value) => {
+                      setTestType(value as 'chat' | 'embeddings');
+                      setTestStatus('idle');
+                      setTestMessage('');
+                    }}
+                    className={styles.testTypeSelect}
+                    disabled={saving || disableControls || isTestingKeys}
+                  />
                   <Select
                     value={testModel}
                     options={modelSelectOptions}

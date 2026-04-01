@@ -38,6 +38,8 @@ export type OpenAIEditOutletContext = {
   handleBack: () => void;
   handleSave: () => Promise<void>;
   mergeDiscoveredModels: (selectedModels: ModelInfo[]) => void;
+  testType: 'chat' | 'embeddings';
+  setTestType: Dispatch<SetStateAction<'chat' | 'embeddings'>>;
 };
 
 const buildEmptyForm = (): OpenAIFormState => ({
@@ -49,6 +51,7 @@ const buildEmptyForm = (): OpenAIFormState => ({
   apiKeyEntries: [buildApiKeyEntry()],
   modelEntries: [{ name: '', alias: '' }],
   testModel: undefined,
+  testType: 'chat',
 });
 
 const parseIndexParam = (value: string | undefined) => {
@@ -159,12 +162,14 @@ export function AiProvidersOpenAIEditLayout() {
   const setDraftTestMessage = useOpenAIEditDraftStore((state) => state.setDraftTestMessage);
   const setDraftKeyTestStatus = useOpenAIEditDraftStore((state) => state.setDraftKeyTestStatus);
   const resetDraftKeyTestStatuses = useOpenAIEditDraftStore((state) => state.resetDraftKeyTestStatuses);
+  const setDraftTestType = useOpenAIEditDraftStore((state) => state.setDraftTestType);
 
   const form = draft?.form ?? buildEmptyForm();
   const testModel = draft?.testModel ?? '';
   const testStatus = draft?.testStatus ?? 'idle';
   const testMessage = draft?.testMessage ?? '';
   const keyTestStatuses = draft?.keyTestStatuses ?? [];
+  const testType = draft?.testType ?? 'chat';
 
   const setForm: Dispatch<SetStateAction<OpenAIFormState>> = useCallback(
     (action) => {
@@ -193,6 +198,13 @@ export function AiProvidersOpenAIEditLayout() {
       setDraftTestMessage(draftKey, action);
     },
     [draftKey, setDraftTestMessage]
+  );
+
+  const setTestType: Dispatch<SetStateAction<'chat' | 'embeddings'>> = useCallback(
+    (action) => {
+      setDraftTestType(draftKey, action);
+    },
+    [draftKey, setDraftTestType]
   );
 
   const handleSetDraftKeyTestStatus = useCallback(
@@ -294,6 +306,7 @@ export function AiProvidersOpenAIEditLayout() {
         testStatus: 'idle',
         testMessage: '',
         keyTestStatuses: [],
+        testType: 'chat',
       });
     } else {
       const emptyForm = buildEmptyForm();
@@ -304,6 +317,7 @@ export function AiProvidersOpenAIEditLayout() {
         testStatus: 'idle',
         testMessage: '',
         keyTestStatuses: [],
+        testType: 'chat',
       });
     }
   }, [draft?.initialized, draftKey, initDraft, initialData, loading]);
@@ -491,6 +505,8 @@ export function AiProvidersOpenAIEditLayout() {
         handleBack,
         handleSave,
         mergeDiscoveredModels,
+        testType,
+        setTestType,
       } satisfies OpenAIEditOutletContext}
     />
   );
