@@ -76,9 +76,15 @@ export const buildOpenAIChatCompletionsEndpoint = (baseUrl: string): string => {
 export const buildOpenAIEmbeddingsEndpoint = (baseUrl: string): string => {
   const trimmed = normalizeOpenAIBaseUrl(baseUrl);
   if (!trimmed) return '';
+  // Handle various base URL formats: /v1, /v1/, /embeddings, /v1/embeddings
   if (trimmed.endsWith('/v1/embeddings') || trimmed.endsWith('/embeddings')) {
     return trimmed;
   }
+  // If already ends with /v1, just add /embeddings
+  if (trimmed.endsWith('/v1')) {
+    return `${trimmed}/embeddings`;
+  }
+  // Otherwise add /v1/embeddings
   return `${trimmed}/v1/embeddings`;
 };
 

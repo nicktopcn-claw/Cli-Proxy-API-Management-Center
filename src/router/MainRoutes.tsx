@@ -64,6 +64,22 @@ const mainRoutes = [
       { path: 'models', element: <AiProvidersOpenAIModelsPage /> },
     ],
   },
+  {
+    path: '/ai-providers/embeddings/new',
+    element: <AiProvidersOpenAIEditLayout />,
+    children: [
+      { index: true, element: <AiProvidersOpenAIEditPage /> },
+      { path: 'models', element: <AiProvidersOpenAIModelsPage /> },
+    ],
+  },
+  {
+    path: '/ai-providers/embeddings/:index',
+    element: <AiProvidersOpenAIEditLayout />,
+    children: [
+      { index: true, element: <AiProvidersOpenAIEditPage /> },
+      { path: 'models', element: <AiProvidersOpenAIModelsPage /> },
+    ],
+  },
   { path: '/ai-providers/ampcode', element: <AiProvidersAmpcodeEditPage /> },
   { path: '/ai-providers', element: <AiProvidersPage /> },
   { path: '/ai-providers/*', element: <AiProvidersPage /> },

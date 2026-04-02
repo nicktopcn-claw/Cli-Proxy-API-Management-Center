@@ -46,6 +46,7 @@ export interface RequestEventsDetailsCardProps {
   codexConfigs: ProviderKeyConfig[];
   vertexConfigs: ProviderKeyConfig[];
   openaiProviders: OpenAIProviderConfig[];
+  embeddingsProviders: OpenAIProviderConfig[];
 }
 
 const toNumber = (value: unknown): number => {
@@ -68,7 +69,8 @@ export function RequestEventsDetailsCard({
   claudeConfigs,
   codexConfigs,
   vertexConfigs,
-  openaiProviders
+  openaiProviders,
+  embeddingsProviders
 }: RequestEventsDetailsCardProps) {
   const { t, i18n } = useTranslation();
 
@@ -110,8 +112,9 @@ export function RequestEventsDetailsCard({
         codexApiKeys: codexConfigs,
         vertexApiKeys: vertexConfigs,
         openaiCompatibility: openaiProviders,
+        embeddingsCompatibility: embeddingsProviders,
       }),
-    [claudeConfigs, codexConfigs, geminiKeys, openaiProviders, vertexConfigs]
+    [claudeConfigs, codexConfigs, embeddingsProviders, geminiKeys, openaiProviders, vertexConfigs]
   );
 
   const rows = useMemo<RequestEventRow[]>(() => {

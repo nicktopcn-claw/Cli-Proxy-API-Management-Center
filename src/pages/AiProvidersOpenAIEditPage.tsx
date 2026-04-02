@@ -119,12 +119,16 @@ export function AiProvidersOpenAIEditPage() {
     handleBack,
     handleSave,
     testType,
-    setTestType,
+    isEmbeddingsRoute,
   } = useOutletContext<OpenAIEditOutletContext>();
 
-  const title = hasIndexParam
-    ? t('ai_providers.openai_edit_modal_title')
-    : t('ai_providers.openai_add_modal_title');
+  const title = useMemo(() => {
+    const typeLabel = isEmbeddingsRoute
+      ? t('ai_providers.embeddings_title')
+      : t('ai_providers.openai_title');
+    const action = hasIndexParam ? 'edit' : 'add';
+    return t(`ai_providers.${action}_modal_title`, { type: typeLabel });
+  }, [hasIndexParam, isEmbeddingsRoute, t]);
 
   const swipeRef = useEdgeSwipeBack({ onBack: handleBack });
   const [isTestingKeys, setIsTestingKeys] = useState(false);
@@ -142,6 +146,21 @@ export function AiProvidersOpenAIEditPage() {
   const canSave = !disableControls && !loading && !saving && !invalidIndexParam && !invalidIndex && !isTestingKeys;
   const hasConfiguredModels = form.modelEntries.some((entry) => entry.name.trim());
   const hasTestableKeys = form.apiKeyEntries.some((entry) => entry.apiKey?.trim());
+
+  // Resolve original model name from alias or name
+  const resolveOriginalModelName = (aliasOrName: string): string => {
+    const trimmed = aliasOrName.trim();
+    if (!trimmed) return trimmed;
+    // Try to find by alias first (alias should be without prefix)
+    const byAlias = form.modelEntries.find(e => e.alias.trim() === trimmed);
+    if (byAlias) return byAlias.name.trim();
+    // Try to find by name
+    const byName = form.modelEntries.find(e => e.name.trim() === trimmed);
+    if (byName) return byName.name.trim();
+    // Return as-is if not found
+    return trimmed;
+  };
+
   const modelSelectOptions = useMemo(() => {
     const seen = new Set<string>();
     return form.modelEntries.reduce<Array<{ value: string; label: string }>>((acc, entry) => {
@@ -149,8 +168,10 @@ export function AiProvidersOpenAIEditPage() {
       if (!name || seen.has(name)) return acc;
       seen.add(name);
       const alias = entry.alias.trim();
+      // Use alias (without prefix) as value, so testModel gets set to alias
+      const value = alias && alias !== name ? alias : name;
       acc.push({
-        value: name,
+        value,
         label: alias && alias !== name ? `${name} (${alias})` : name,
       });
       return acc;
@@ -163,8 +184,8 @@ export function AiProvidersOpenAIEditPage() {
     const modelsSignature = form.modelEntries
       .map((entry) => `${entry.name.trim()}:${entry.alias.trim()}`)
       .join('|');
-    return [form.baseUrl.trim(), testModel.trim(), headersSignature, modelsSignature].join('||');
-  }, [form.baseUrl, form.headers, form.modelEntries, testModel]);
+    return [form.baseUrl.trim(), testModel.trim(), headersSignature, modelsSignature, testType].join('||');
+  }, [form.baseUrl, form.headers, form.modelEntries, testModel, testType]);
   const previousConnectivityConfigRef = useRef(connectivityConfigSignature);
 
   useEffect(() => {
@@ -185,7 +206,7 @@ export function AiProvidersOpenAIEditPage() {
 
   // Test a single key by index
   const runSingleKeyTest = useCallback(
-    async (keyIndex: number): Promise<boolean> => {
+    async (keyIndex: number, forcedModel?: string): Promise<boolean> => {
       const baseUrl = form.baseUrl.trim();
       if (!baseUrl) {
         showNotification(t('notification.openai_test_url_required'), 'error');
@@ -206,16 +227,25 @@ export function AiProvidersOpenAIEditPage() {
         return false;
       }
 
-      // For embeddings, use a default model if testModel is empty
-      let modelName = testModel.trim();
+      // Use forcedModel if provided, otherwise fall back to logic in runSingleKeyTest
+      let modelName = forcedModel || testModel.trim();
       if (!modelName) {
-        if (testType === 'embeddings' && availableModels.length > 0) {
-          modelName = availableModels[0];
-        } else if (testType === 'embeddings') {
-          // Use a known working model for Jina embeddings
+        if (testType === 'embeddings') {
+          // For embeddings, use model without prefix
           modelName = 'jina-embeddings-v2-base-en';
         } else if (availableModels.length > 0) {
           modelName = availableModels[0];
+        }
+      } else {
+        // For embeddings, strip the prefix (e.g., "jina-ai/jina-embeddings-v4" -> "jina-embeddings-v4")
+        // For chat/completions, keep the prefix
+        if (testType === 'embeddings') {
+          modelName = resolveOriginalModelName(modelName);
+          // Strip provider prefix for embeddings API
+          const match = modelName.match(/^[^/]+\/(.+)$/);
+          if (match) modelName = match[1];
+        } else {
+          modelName = resolveOriginalModelName(modelName);
         }
       }
       
@@ -265,10 +295,15 @@ export function AiProvidersOpenAIEditPage() {
 
         if (testType === 'embeddings') {
           const responseBody = result.body ?? result.bodyText ?? '';
-          const response = typeof responseBody === 'string' ? JSON.parse(responseBody) : responseBody;
-          const data = response?.data;
-          if (!data || (!Array.isArray(data) && !Array.isArray(response))) {
-            throw new Error('Invalid embeddings response: missing data array');
+          let response: unknown;
+          try {
+            response = typeof responseBody === 'string' ? JSON.parse(responseBody) : responseBody;
+          } catch {
+            throw new Error('Invalid JSON response from embeddings endpoint');
+          }
+          const data = response && typeof response === 'object' ? (response as Record<string, unknown>).data : undefined;
+          if (!data) {
+            throw new Error('Invalid embeddings response: missing data field');
           }
         }
 
@@ -276,6 +311,7 @@ export function AiProvidersOpenAIEditPage() {
         return true;
       } catch (err: unknown) {
         const message = getErrorMessage(err);
+        console.error('Test failed:', message, 'Endpoint:', endpoint, 'Model:', modelName, 'Key:', keyEntry.apiKey?.slice(0, 10) + '...');
         const errorCode =
           typeof err === 'object' && err !== null && 'code' in err
             ? String((err as { code?: string }).code)
@@ -329,7 +365,22 @@ export function AiProvidersOpenAIEditPage() {
     }
 
     const modelName = testModel.trim() || availableModels[0] || '';
-    if (!modelName) {
+    // For embeddings, always use a known working model for testing (without prefix)
+    let finalModelName = modelName;
+    if (testType === 'embeddings' && !finalModelName) {
+      finalModelName = 'jina-embeddings-v2-base-en';
+    } else if (finalModelName) {
+      // For embeddings, strip the prefix (e.g., "jina-ai/jina-embeddings-v4" -> "jina-embeddings-v4")
+      // For chat/completions, keep the prefix
+      if (testType === 'embeddings') {
+        finalModelName = resolveOriginalModelName(finalModelName);
+        const match = finalModelName.match(/^[^/]+\/(.+)$/);
+        if (match) finalModelName = match[1];
+      } else {
+        finalModelName = resolveOriginalModelName(finalModelName);
+      }
+    }
+    if (!finalModelName) {
       const message = t('notification.openai_test_model_required');
       setTestStatus('error');
       setTestMessage(message);
@@ -354,7 +405,9 @@ export function AiProvidersOpenAIEditPage() {
     resetDraftKeyTestStatuses(form.apiKeyEntries.length);
 
     try {
-      const results = await Promise.all(validKeyIndexes.map((index) => runSingleKeyTest(index)));
+      // For embeddings route, pass the correct model
+      const testModelName = testType === 'embeddings' ? finalModelName : finalModelName;
+      const results = await Promise.all(validKeyIndexes.map((index) => runSingleKeyTest(index, testModelName)));
 
       const successCount = results.filter(Boolean).length;
       const failCount = validKeyIndexes.length - successCount;
@@ -670,23 +723,9 @@ export function AiProvidersOpenAIEditPage() {
               <div className={styles.modelTestPanel}>
                 <div className={styles.modelTestMeta}>
                   <label className={styles.modelTestLabel}>{t('ai_providers.openai_test_title')}</label>
-                  <span className={styles.modelTestHint}>{t('ai_providers.openai_test_hint')}</span>
+                  <span className={styles.modelTestHint}>{testType === 'embeddings' ? t('ai_providers.openai_test_embeddings_hint') : t('ai_providers.openai_test_hint')}</span>
                 </div>
                 <div className={styles.modelTestControls}>
-                  <Select
-                    value={testType}
-                    options={[
-                      { value: 'chat', label: 'Chat' },
-                      { value: 'embeddings', label: 'Embeddings' },
-                    ]}
-                    onChange={(value) => {
-                      setTestType(value as 'chat' | 'embeddings');
-                      setTestStatus('idle');
-                      setTestMessage('');
-                    }}
-                    className={styles.testTypeSelect}
-                    disabled={saving || disableControls || isTestingKeys}
-                  />
                   <Select
                     value={testModel}
                     options={modelSelectOptions}

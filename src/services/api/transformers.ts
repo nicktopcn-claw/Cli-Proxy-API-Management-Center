@@ -433,6 +433,13 @@ export const normalizeConfigResponse = (raw: unknown): Config => {
       .filter(Boolean) as OpenAIProviderConfig[];
   }
 
+  const embeddingsList = raw['embeddings-compatibility'] ?? raw.embeddingsCompatibility;
+  if (Array.isArray(embeddingsList)) {
+    config.embeddingsCompatibility = embeddingsList
+      .map((item) => normalizeOpenAIProvider(item))
+      .filter(Boolean) as OpenAIProviderConfig[];
+  }
+
   const ampcode = normalizeAmpcodeConfig(raw.ampcode);
   if (ampcode) {
     config.ampcode = ampcode;

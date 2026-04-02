@@ -8,6 +8,7 @@ export interface SourceInfoMapInput {
   codexApiKeys?: ProviderKeyConfig[];
   vertexApiKeys?: ProviderKeyConfig[];
   openaiCompatibility?: OpenAIProviderConfig[];
+  embeddingsCompatibility?: OpenAIProviderConfig[];
 }
 
 export function buildSourceInfoMap(input: SourceInfoMapInput): Map<string, SourceInfo> {
@@ -53,6 +54,17 @@ export function buildSourceInfoMap(input: SourceInfoMapInput): Map<string, Sourc
       buildCandidateUsageSourceIds({ apiKey: entry.apiKey }).forEach((id) => candidates.add(id));
     });
     registerCandidates(displayName, 'openai', Array.from(candidates));
+  });
+
+  // Embeddings 特殊处理：多 apiKeyEntries
+  (input.embeddingsCompatibility || []).forEach((provider, providerIndex) => {
+    const displayName = provider.prefix?.trim() || provider.name || `Embeddings #${providerIndex + 1}`;
+    const candidates = new Set<string>();
+    buildCandidateUsageSourceIds({ prefix: provider.prefix }).forEach((id) => candidates.add(id));
+    (provider.apiKeyEntries || []).forEach((entry) => {
+      buildCandidateUsageSourceIds({ apiKey: entry.apiKey }).forEach((id) => candidates.add(id));
+    });
+    registerCandidates(displayName, 'embeddings', Array.from(candidates));
   });
 
   return map;

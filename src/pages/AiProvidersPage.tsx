@@ -5,6 +5,7 @@ import {
   AmpcodeSection,
   ClaudeSection,
   CodexSection,
+  EmbeddingsSection,
   GeminiSection,
   OpenAISection,
   VertexSection,
@@ -53,6 +54,9 @@ export function AiProvidersPage() {
   const [openaiProviders, setOpenaiProviders] = useState<OpenAIProviderConfig[]>(
     () => config?.openaiCompatibility || []
   );
+  const [embeddingsProviders, setEmbeddingsProviders] = useState<OpenAIProviderConfig[]>(
+    () => config?.embeddingsCompatibility || []
+  );
 
   const [configSwitchingKey, setConfigSwitchingKey] = useState<string | null>(null);
 
@@ -74,9 +78,10 @@ export function AiProvidersPage() {
     }
     setError('');
     try {
-      const [configResult, vertexResult, ampcodeResult] = await Promise.allSettled([
+      const [configResult, vertexResult, embeddingsResult, ampcodeResult] = await Promise.allSettled([
         fetchConfig(),
         providersApi.getVertexConfigs(),
+        providersApi.getEmbeddingsProviders(),
         ampcodeApi.getAmpcode(),
       ]);
 
@@ -90,6 +95,12 @@ export function AiProvidersPage() {
       setClaudeConfigs(data?.claudeApiKeys || []);
       setVertexConfigs(data?.vertexApiKeys || []);
       setOpenaiProviders(data?.openaiCompatibility || []);
+
+      if (embeddingsResult.status === 'fulfilled') {
+        setEmbeddingsProviders(embeddingsResult.value || []);
+        updateConfigValue('embeddings-compatibility', embeddingsResult.value || []);
+        clearCache('embeddings-compatibility');
+      }
 
       if (vertexResult.status === 'fulfilled') {
         setVertexConfigs(vertexResult.value || []);
@@ -122,12 +133,14 @@ export function AiProvidersPage() {
     if (config?.claudeApiKeys) setClaudeConfigs(config.claudeApiKeys);
     if (config?.vertexApiKeys) setVertexConfigs(config.vertexApiKeys);
     if (config?.openaiCompatibility) setOpenaiProviders(config.openaiCompatibility);
+    if (config?.embeddingsCompatibility) setEmbeddingsProviders(config.embeddingsCompatibility);
   }, [
     config?.geminiApiKeys,
     config?.codexApiKeys,
     config?.claudeApiKeys,
     config?.vertexApiKeys,
     config?.openaiCompatibility,
+    config?.embeddingsCompatibility,
   ]);
 
   useHeaderRefresh(refreshKeyStats);
@@ -352,6 +365,30 @@ export function AiProvidersPage() {
     });
   };
 
+  const deleteEmbeddings = async (index: number) => {
+    const entry = embeddingsProviders[index];
+    if (!entry) return;
+    showConfirmation({
+      title: t('ai_providers.embeddings_delete_title', { defaultValue: 'Delete Embeddings Provider' }),
+      message: t('ai_providers.embeddings_delete_confirm'),
+      variant: 'danger',
+      confirmText: t('common.confirm'),
+      onConfirm: async () => {
+        try {
+          await providersApi.deleteEmbeddingsProvider(entry.name);
+          const next = embeddingsProviders.filter((_, idx) => idx !== index);
+          setEmbeddingsProviders(next);
+          updateConfigValue('embeddings-compatibility', next);
+          clearCache('embeddings-compatibility');
+          showNotification(t('notification.embeddings_provider_deleted'), 'success');
+        } catch (err: unknown) {
+          const message = getErrorMessage(err);
+          showNotification(`${t('notification.delete_failed')}: ${message}`, 'error');
+        }
+      },
+    });
+  };
+
   return (
     <div className={styles.container}>
       <h1 className={styles.pageTitle}>{t('ai_providers.title')}</h1>
@@ -440,6 +477,20 @@ export function AiProvidersPage() {
             onAdd={() => openEditor('/ai-providers/openai/new')}
             onEdit={(index) => openEditor(`/ai-providers/openai/${index}`)}
             onDelete={deleteOpenai}
+          />
+        </div>
+
+        <div id="provider-embeddings">
+          <EmbeddingsSection
+            configs={embeddingsProviders}
+            keyStats={keyStats}
+            usageDetails={usageDetails}
+            loading={loading}
+            disableControls={disableControls}
+            isSwitching={isSwitching}
+            onAdd={() => openEditor('/ai-providers/embeddings/new')}
+            onEdit={(index) => openEditor(`/ai-providers/embeddings/${index}`)}
+            onDelete={deleteEmbeddings}
           />
         </div>
       </div>

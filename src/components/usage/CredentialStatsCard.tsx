@@ -22,6 +22,7 @@ export interface CredentialStatsCardProps {
   codexConfigs: ProviderKeyConfig[];
   vertexConfigs: ProviderKeyConfig[];
   openaiProviders: OpenAIProviderConfig[];
+  embeddingsProviders: OpenAIProviderConfig[];
 }
 
 interface CredentialRow {
@@ -47,6 +48,7 @@ export function CredentialStatsCard({
   codexConfigs,
   vertexConfigs,
   openaiProviders,
+  embeddingsProviders,
 }: CredentialStatsCardProps) {
   const { t } = useTranslation();
   const [authFileMap, setAuthFileMap] = useState<Map<string, CredentialInfo>>(new Map());
@@ -211,6 +213,42 @@ export function CredentialStatsCard({
       }
     });
 
+    // Embeddings compatibility providers
+    embeddingsProviders.forEach((provider, providerIndex) => {
+      const prefix = provider.prefix;
+      const displayName = prefix?.trim() || provider.name || `Embeddings #${providerIndex + 1}`;
+
+      const candidates = new Set<string>();
+      buildCandidateUsageSourceIds({ prefix }).forEach((id) => candidates.add(id));
+      (provider.apiKeyEntries || []).forEach((entry) => {
+        buildCandidateUsageSourceIds({ apiKey: entry.apiKey }).forEach((id) => candidates.add(id));
+      });
+
+      let success = 0;
+      let failure = 0;
+      candidates.forEach((id) => {
+        const bucket = bySource[id];
+        if (bucket) {
+          success += bucket.success;
+          failure += bucket.failure;
+          consumedSourceIds.add(id);
+        }
+      });
+
+      const total = success + failure;
+      if (total > 0) {
+        result.push({
+          key: `embeddings:${providerIndex}`,
+          displayName,
+          type: 'embeddings',
+          success,
+          failure,
+          total,
+          successRate: (success / total) * 100,
+        });
+      }
+    });
+
     // Remaining unmatched bySource entries — resolve name from auth files if possible
     Object.entries(bySource).forEach(([key, bucket]) => {
       if (consumedSourceIds.has(key)) return;
@@ -267,7 +305,7 @@ export function CredentialStatsCard({
     });
 
     return result.sort((a, b) => b.total - a.total);
-  }, [usage, geminiKeys, claudeConfigs, codexConfigs, vertexConfigs, openaiProviders, authFileMap]);
+  }, [usage, geminiKeys, claudeConfigs, codexConfigs, vertexConfigs, openaiProviders, embeddingsProviders, authFileMap]);
 
   return (
     <Card title={t('usage_stats.credential_stats')} className={styles.detailsFixedCard}>

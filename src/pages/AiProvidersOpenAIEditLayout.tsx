@@ -40,6 +40,7 @@ export type OpenAIEditOutletContext = {
   mergeDiscoveredModels: (selectedModels: ModelInfo[]) => void;
   testType: 'chat' | 'embeddings';
   setTestType: Dispatch<SetStateAction<'chat' | 'embeddings'>>;
+  isEmbeddingsRoute?: boolean;
 };
 
 const buildEmptyForm = (): OpenAIFormState => ({
@@ -130,6 +131,10 @@ export function AiProvidersOpenAIEditLayout() {
   const editIndex = useMemo(() => parseIndexParam(params.index), [params.index]);
   const invalidIndexParam = hasIndexParam && editIndex === null;
 
+  const locationPath = location.pathname;
+  const isEmbeddingsRoute = locationPath.includes('/ai-providers/embeddings');
+  const providerType = isEmbeddingsRoute ? 'embeddings-compatibility' : 'openai-compatibility';
+
   const connectionStatus = useAuthStore((state) => state.connectionStatus);
   const disableControls = connectionStatus !== 'connected';
 
@@ -138,18 +143,19 @@ export function AiProvidersOpenAIEditLayout() {
   const isCacheValid = useConfigStore((state) => state.isCacheValid);
 
   const [providers, setProviders] = useState<OpenAIProviderConfig[]>(
-    () => config?.openaiCompatibility ?? []
+    () => config?.[providerType === 'embeddings-compatibility' ? 'embeddingsCompatibility' : 'openaiCompatibility'] ?? []
   );
   const [loading, setLoading] = useState(
-    () => !isCacheValid('openai-compatibility')
+    () => !isCacheValid(providerType)
   );
   const [saving, setSaving] = useState(false);
 
   const draftKey = useMemo(() => {
-    if (invalidIndexParam) return `openai:invalid:${params.index ?? 'unknown'}`;
-    if (editIndex === null) return 'openai:new';
-    return `openai:${editIndex}`;
-  }, [editIndex, invalidIndexParam, params.index]);
+    const prefix = isEmbeddingsRoute ? 'embeddings' : 'openai';
+    if (invalidIndexParam) return `${prefix}:invalid:${params.index ?? 'unknown'}`;
+    if (editIndex === null) return `${prefix}:new`;
+    return `${prefix}:${editIndex}`;
+  }, [editIndex, invalidIndexParam, params.index, isEmbeddingsRoute]);
 
   const draft = useOpenAIEditDraftStore((state) => state.drafts[draftKey]);
   const acquireDraft = useOpenAIEditDraftStore((state) => state.acquireDraft);
@@ -169,7 +175,6 @@ export function AiProvidersOpenAIEditLayout() {
   const testStatus = draft?.testStatus ?? 'idle';
   const testMessage = draft?.testMessage ?? '';
   const keyTestStatuses = draft?.keyTestStatuses ?? [];
-  const testType = draft?.testType ?? 'chat';
 
   const setForm: Dispatch<SetStateAction<OpenAIFormState>> = useCallback(
     (action) => {
@@ -249,12 +254,12 @@ export function AiProvidersOpenAIEditLayout() {
 
   useEffect(() => {
     let cancelled = false;
-    const hasValidCache = isCacheValid('openai-compatibility');
+    const hasValidCache = isCacheValid(providerType);
     if (!hasValidCache) {
       setLoading(true);
     }
 
-    fetchConfig('openai-compatibility')
+    fetchConfig(providerType)
       .then((value) => {
         if (cancelled) return;
         setProviders(Array.isArray(value) ? (value as OpenAIProviderConfig[]) : []);
@@ -272,7 +277,7 @@ export function AiProvidersOpenAIEditLayout() {
     return () => {
       cancelled = true;
     };
-  }, [fetchConfig, isCacheValid, showNotification, t]);
+  }, [fetchConfig, isCacheValid, providerType, showNotification, t]);
 
   useEffect(() => {
     if (loading) return;
@@ -306,7 +311,7 @@ export function AiProvidersOpenAIEditLayout() {
         testStatus: 'idle',
         testMessage: '',
         keyTestStatuses: [],
-        testType: 'chat',
+        testType: isEmbeddingsRoute ? 'embeddings' : 'chat',
       });
     } else {
       const emptyForm = buildEmptyForm();
@@ -317,10 +322,10 @@ export function AiProvidersOpenAIEditLayout() {
         testStatus: 'idle',
         testMessage: '',
         keyTestStatuses: [],
-        testType: 'chat',
+        testType: isEmbeddingsRoute ? 'embeddings' : 'chat',
       });
     }
-  }, [draft?.initialized, draftKey, initDraft, initialData, loading]);
+  }, [draft?.initialized, draftKey, initDraft, initialData, loading, isEmbeddingsRoute]);
 
   useEffect(() => {
     if (loading) return;
@@ -380,11 +385,12 @@ export function AiProvidersOpenAIEditLayout() {
   const baselineSignature = draft?.baselineSignature ?? '';
   const isDirty = Boolean(draft?.initialized) && baselineSignature !== currentSignature;
   const editorRootPath = useMemo(() => {
+    const basePath = isEmbeddingsRoute ? '/ai-providers/embeddings' : '/ai-providers/openai';
     if (hasIndexParam) {
-      return `/ai-providers/openai/${params.index ?? ''}`;
+      return `${basePath}/${params.index ?? ''}`;
     }
-    return '/ai-providers/openai/new';
-  }, [hasIndexParam, params.index]);
+    return `${basePath}/new`;
+  }, [hasIndexParam, params.index, isEmbeddingsRoute]);
   const canGuard = !resolvedLoading && !saving && !invalidIndexParam && !invalidIndex;
 
   const { allowNextNavigation } = useUnsavedChangesGuard({
@@ -439,11 +445,15 @@ export function AiProvidersOpenAIEditLayout() {
           ? providers.map((item, idx) => (idx === editIndex ? payload : item))
           : [...providers, payload];
 
-      await providersApi.saveOpenAIProviders(nextList);
+      if (isEmbeddingsRoute) {
+        await providersApi.saveEmbeddingsProviders(nextList);
+      } else {
+        await providersApi.saveOpenAIProviders(nextList);
+      }
 
       let syncedProviders = nextList;
       try {
-        const latest = await fetchConfig('openai-compatibility', true);
+        const latest = await fetchConfig(providerType, true);
         if (Array.isArray(latest)) {
           syncedProviders = latest as OpenAIProviderConfig[];
         }
@@ -454,8 +464,8 @@ export function AiProvidersOpenAIEditLayout() {
       setProviders(syncedProviders);
       showNotification(
         editIndex !== null
-          ? t('notification.openai_provider_updated')
-          : t('notification.openai_provider_added'),
+          ? t(isEmbeddingsRoute ? 'notification.embeddings_provider_updated' : 'notification.openai_provider_updated')
+          : t(isEmbeddingsRoute ? 'notification.embeddings_provider_added' : 'notification.openai_provider_added'),
         'success'
       );
       allowNextNavigation();
@@ -505,8 +515,9 @@ export function AiProvidersOpenAIEditLayout() {
         handleBack,
         handleSave,
         mergeDiscoveredModels,
-        testType,
+        testType: isEmbeddingsRoute ? 'embeddings' : 'chat',
         setTestType,
+        isEmbeddingsRoute,
       } satisfies OpenAIEditOutletContext}
     />
   );

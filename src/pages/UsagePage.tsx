@@ -373,6 +373,7 @@ export function UsagePage() {
         codexConfigs={config?.codexApiKeys || []}
         vertexConfigs={config?.vertexApiKeys || []}
         openaiProviders={config?.openaiCompatibility || []}
+        embeddingsProviders={config?.embeddingsCompatibility || []}
       />
 
       {/* Credential Stats */}
@@ -384,6 +385,7 @@ export function UsagePage() {
         codexConfigs={config?.codexApiKeys || []}
         vertexConfigs={config?.vertexApiKeys || []}
         openaiProviders={config?.openaiCompatibility || []}
+        embeddingsProviders={config?.embeddingsCompatibility || []}
       />
 
       {/* Price Settings */}

@@ -221,5 +221,20 @@ export const providersApi = {
     apiClient.patch('/openai-compatibility', { index, value: serializeOpenAIProvider(value) }),
 
   deleteOpenAIProvider: (name: string) =>
-    apiClient.delete(`/openai-compatibility?name=${encodeURIComponent(name)}`)
+    apiClient.delete(`/openai-compatibility?name=${encodeURIComponent(name)}`),
+
+  async getEmbeddingsProviders(): Promise<OpenAIProviderConfig[]> {
+    const data = await apiClient.get('/embeddings-compatibility');
+    const list = extractArrayPayload(data, 'embeddings-compatibility');
+    return list.map((item) => normalizeOpenAIProvider(item)).filter(Boolean) as OpenAIProviderConfig[];
+  },
+
+  saveEmbeddingsProviders: (providers: OpenAIProviderConfig[]) =>
+    apiClient.put('/embeddings-compatibility', providers.map((item) => serializeOpenAIProvider(item))),
+
+  updateEmbeddingsProvider: (index: number, value: OpenAIProviderConfig) =>
+    apiClient.patch('/embeddings-compatibility', { index, value: serializeOpenAIProvider(value) }),
+
+  deleteEmbeddingsProvider: (name: string) =>
+    apiClient.delete(`/embeddings-compatibility?name=${encodeURIComponent(name)}`)
 };
